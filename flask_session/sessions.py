@@ -483,13 +483,16 @@ class SqlAlchemySessionInterface(SessionInterface):
     serializer = pickle
     session_class = SqlAlchemySession
 
-    def __init__(self, app, db, table, key_prefix, use_signer=False):
+    def __init__(self, app, db, table, key_prefix, use_signer=False,
+                 permanent=True):
         if db is None:
             from flask.ext.sqlalchemy import SQLAlchemy
             db = SQLAlchemy(app)
         self.db = db
         self.key_prefix = key_prefix
         self.use_signer = use_signer
+        self.permanent = permanent
+        self.has_same_site_capability = hasattr(self, "get_cookie_samesite")
         
         if table not in self.db.metadata:
             # ^ Only create Session Model if it doesn't already exist
