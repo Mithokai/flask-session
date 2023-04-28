@@ -483,35 +483,37 @@ class SqlAlchemySessionInterface(SessionInterface):
     serializer = pickle
     session_class = SqlAlchemySession
 
-    def __init__(self, app, db, table, key_prefix, use_signer=False,
-                 permanent=True):
+    def __init__(self, app, db, table, key_prefix, use_signer=False):
         if db is None:
-            from flask_sqlalchemy import SQLAlchemy
+            from flask.ext.sqlalchemy import SQLAlchemy
             db = SQLAlchemy(app)
         self.db = db
         self.key_prefix = key_prefix
         self.use_signer = use_signer
-        self.permanent = permanent
-        self.has_same_site_capability = hasattr(self, "get_cookie_samesite")
+        
+        if table not in self.db.metadata:
+            # ^ Only create Session Model if it doesn't already exist
+            # Fixes the SQLAlchemy "extend_existing must be true" exception during tests
+            class Session(self.db.Model):
+                __tablename__ = table
 
-        class Session(self.db.Model):
-            __tablename__ = table
+                id = self.db.Column(self.db.Integer, primary_key=True)
+                session_id = self.db.Column(self.db.String(512), unique=True)
+                data = self.db.Column(self.db.LargeBinary)
+                expiry = self.db.Column(self.db.DateTime)
 
-            id = self.db.Column(self.db.Integer, primary_key=True)
-            session_id = self.db.Column(self.db.String(512), unique=True)
-            data = self.db.Column(self.db.LargeBinary)
-            expiry = self.db.Column(self.db.DateTime)
+                def __init__(self, session_id, data, expiry):
+                    self.session_id = session_id
+                    self.data = data
+                    self.expiry = expiry
 
-            def __init__(self, session_id, data, expiry):
-                self.session_id = session_id
-                self.data = data
-                self.expiry = expiry
+                def __repr__(self):
+                    return '<Session data %s>' % self.data
 
-            def __repr__(self):
-                return '<Session data %s>' % self.data
-
-        # self.db.create_all()
-        self.sql_session_model = Session
+            # self.db.create_all()
+            self.sql_session_model = db.session_ext_session_model = Session
+        else:
+            self.sql_session_model = db.session_ext_session_model
 
     def open_session(self, app, request):
         sid = request.cookies.get(app.session_cookie_name)
